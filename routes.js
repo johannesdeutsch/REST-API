@@ -8,14 +8,33 @@ const { authenticateUser } = require('./middleware/auth-user');
 const router = express.Router();
 
 router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
-    const user = await req.currentUser;
-    res.json(user);
+    const authenticatedUser = await req.currentUser;
+    res.json(authenticatedUser);
 }));
 
 router.post('/users', authenticateUser, asyncHandler(async (req, res) => {
     const newUser = await User.create(req.body);
-    res.location('/');
-    res.status(201).json(newUser);
+    const errors = [];
+    if (!newUser.firstName) {
+        errors.push('Please provide a value for the "first name"');
+    }
+    if (!newUser.lastName) {
+        errors.push('Please provide a value for the "last name"'); 
+    }
+    if (!newUser.emailAddress) {
+        errors.push('Please provide a value for the "email address"'); 
+    }
+    if (!newUser.password) {
+        errors.push('Please provide a value for the "password"'); 
+    }
+    if (errors.length > 0) {
+        res.status(400).json({ errors });
+    } else {
+        res.location('/');
+        users.push(newUser);
+        res.status(201).json(newUser);
+        
+    }
 }));
 
 //Retrieve a collection of all courses and a 200 HTTP status code
@@ -31,10 +50,20 @@ router.get('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
 
 router.post('/courses', authenticateUser, asyncHandler(async (req, res) => {
     const newCourse = await Course.create(req.body);
-    console.log(req.body);
-    console.log(res);
-    res.location(`/courses/${newCourse.userId}`);
+    res.location(`/courses/${newCourse.id}`);
     res.status(201).json(newCourse);
+}));
+
+router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
+    const findCourseToUpdate = await Course.findByPk(req.params.id);
+    const updateCourse = await findCourseToUpdate.update(req.body);
+    res.status(204).json(updateCourse);
+}));
+
+router.delete('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
+    const findCourseToDelete = await Course.findByPk(req.params.id);
+    const deleteCourse = await findCourseToDelete.destroy();
+    res.status(204).json(deleteCourse);
 }));
 
 module.exports = router;
