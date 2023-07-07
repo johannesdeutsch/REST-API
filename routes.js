@@ -14,6 +14,7 @@ const dataFilePath = path.join(__dirname, 'seed', 'data.json');
 
 const router = express.Router();
 
+//show the currently authenticated user
 router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
     const authenticatedUser = await req.currentUser;
     // Exceeds: extract the desired properties...
@@ -26,35 +27,35 @@ router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
 // create a new user
 router.post('/users', asyncHandler(async (req, res) => {
     try {
-//        const jsonData = await readDataFromFile();
-//        let users = jsonData.users;
-            const newUser = await User.create(req.body);
-            const errors = [];
-    if (!newUser.firstName) {
-        errors.push('Please provide a value for the "first name"');
-    }
-    if (!newUser.lastName) {
-        errors.push('Please provide a value for the "last name"'); 
-    }
-    if (!newUser.emailAddress) {
-        errors.push('Please provide a value for the "email address"'); 
-    }
-    if (!newUser.password) {
-        errors.push('Please provide a value for the "password"'); 
-    }
-    if (errors.length > 0) {
-        res.status(400).json({ errors });
-    } else {
-        res.location('/');
-        const salt = bcrypt.genSaltSync(10);
-        const hashedPassword = bcrypt.hashSync(`${newUser.password}`, salt);
-        //update the password:
-        newUser.password = hashedPassword;
-        //saving the new User to the database
-        await newUser.save();
-        //users.push(newUser);
-        res.status(201).json(newUser);        
-    }
+        const newUser = await User.create(req.body);
+        const errors = [];
+        
+        //check validation
+        if (!newUser.firstName) {
+            errors.push('Please provide a value for the "first name"');
+        }
+        if (!newUser.lastName) {
+            errors.push('Please provide a value for the "last name"'); 
+        }
+        if (!newUser.emailAddress) {
+            errors.push('Please provide a value for the "email address"'); 
+        }
+        if (!newUser.password) {
+            errors.push('Please provide a value for the "password"'); 
+        }
+        if (errors.length > 0) {
+            res.status(400).json({ errors });
+        } else {
+            res.location('/');
+            const salt = bcrypt.genSaltSync(10);
+            const hashedPassword = bcrypt.hashSync(`${newUser.password}`, salt);
+            //update the password:
+            newUser.password = hashedPassword;
+            //saving the new User to the database
+            await newUser.save();
+            //users.push(newUser);
+            res.status(201).json(newUser);        
+        }
     } catch(error) {
         if (error.name === 'SequelizeUniqueConstraintError') {
             res.status(400).json({ error: 'This email address exists already in our database' });
@@ -63,46 +64,26 @@ router.post('/users', asyncHandler(async (req, res) => {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }
-//} catch (err) {
-//    console.error(err);
-//    res.status(500).json({ error: 'Internal Server Error' });
-//}
 }));
 
-
-// this function is a code snippet from chat.openai.com, I tried to define the users variable in data.json
-/* function readDataFromFile() {
-    return new Promise((resolve, reject) => {
-      fs.readFile(dataFilePath, 'utf8', (err, data) => {
-        if (err) {
-          reject(err);
-        } else {
-          try {
-            const jsonData = JSON.parse(data);
-            resolve(jsonData);
-          } catch (parseError) {
-            reject(parseError);
-          }
-        }
-      });
-    });
-  } */
 
 //Retrieve a collection of all courses and a 200 HTTP status code
 router.get('/courses', asyncHandler(async (req, res) => {
     const courses = await Course.findAll();
-    // Exceeds: extract the desired properties...
-    const { id, title, description, estimatedTime, materialsNeeded, userId } = courses;
-    //... and create a new object with the filtered properties
-    const filteredProperties = { id, title, description, estimatedTime, materialsNeeded, userId };
+    //Exceeds: Iterate over each course to extract the desired properties...
+    const filteredProperties = courses.map(course => {
+        const { id, title, description, estimatedTime, materialsNeeded, userId } = course;
+        return { id, title, description, estimatedTime, materialsNeeded, userId };
+    });
     res.json(filteredProperties);
 }));
 
+//show a specific course based on its ID
 router.get('/courses/:id', asyncHandler(async (req, res) => {
     const userCourse = await Course.findByPk(req.params.id);
+    //filter the following properties
     const { id, title, description, estimatedTime, materialsNeeded, userId } = userCourse;
-     //... and create a new object with the filtered properties
-     const filteredProperties = { id, title, description, estimatedTime, materialsNeeded, userId };
+    const filteredProperties = { id, title, description, estimatedTime, materialsNeeded, userId };
     res.json(filteredProperties);
 }));
 
@@ -111,6 +92,7 @@ router.get('/courses/:id', asyncHandler(async (req, res) => {
 router.post('/courses', authenticateUser, asyncHandler(async (req, res) => {   
         const newCourse = await Course.create(req.body);
         const errors = [];
+    //check validation
     if (!newCourse.title) {
         errors.push('Please provide a value for the "title"');
     }
@@ -125,6 +107,7 @@ router.post('/courses', authenticateUser, asyncHandler(async (req, res) => {
     }
 }));
 
+//update course route
 router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
     try {
         const authenticatedUser = await req.currentUser;
@@ -145,6 +128,8 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
 
         const updateCourse = await findCourseToUpdate.update(req.body);
         const errors = [];
+        
+        //check if a title and description are entered
         if (!updateCourse.title) {
             errors.push('Please provide a value for the "title"');
         }
@@ -161,6 +146,7 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
     }  
 }));
 
+//delete course route
 router.delete('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
     try {
         const authenticatedUser = await req.currentUser;
