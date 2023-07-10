@@ -47,21 +47,13 @@ router.post('/users', asyncHandler(async (req, res) => {
             res.status(400).json({ errors });
         } else {
             res.location('/');
-            const salt = bcrypt.genSaltSync(10);
-            const hashedPassword = bcrypt.hashSync(`${newUser.password}`, salt);
-            //update the password:
-            newUser.password = hashedPassword;
-            //saving the new User to the database
-            await newUser.save();
-            //users.push(newUser);
-            res.status(201).json(newUser);        
+            res.status(201).end();        
         }
     } catch(error) {
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            res.status(400).json({ error: 'This email address exists already in our database' });
-        } else {
-            console.error(error);
-            res.status(500).json({ error: 'Internal Server Error' });
+        console.error(error);
+        if (error.name === 'SequelizeUniqueConstraintError' || error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map((err) => err.message);
+            res.status(400).json({ errors: validationErrors });
         }
     }
 }));
@@ -69,11 +61,20 @@ router.post('/users', asyncHandler(async (req, res) => {
 
 //Retrieve a collection of all courses and a 200 HTTP status code
 router.get('/courses', asyncHandler(async (req, res) => {
-    const courses = await Course.findAll();
+    const courses = await Course.findAll({
+        include: {
+            model: User, 
+            attributes: ['id', 'firstName', 'lastName', 'emailAddress']
+        }
+    });
     //Exceeds: Iterate over each course to extract the desired properties...
     const filteredProperties = courses.map(course => {
-        const { id, title, description, estimatedTime, materialsNeeded, userId } = course;
-        return { id, title, description, estimatedTime, materialsNeeded, userId };
+        const { 
+            id, title, description, estimatedTime, materialsNeeded, User: { id: userId, firstName, lastName, emailAddress } 
+        } = course;
+        return { 
+            id, title, description, estimatedTime, materialsNeeded, User: { id: userId, firstName, lastName, emailAddress } 
+        };
     });
     res.json(filteredProperties);
 }));
@@ -90,20 +91,32 @@ router.get('/courses/:id', asyncHandler(async (req, res) => {
 
 //create a new course
 router.post('/courses', authenticateUser, asyncHandler(async (req, res) => {   
+    
+    try {
         const newCourse = await Course.create(req.body);
         const errors = [];
-    //check validation
-    if (!newCourse.title) {
-        errors.push('Please provide a value for the "title"');
-    }
-    if (!newCourse.description) {
-        errors.push('Please provide a value for the "description"'); 
-    }
-    if (errors.length > 0) {
-        res.status(400).json({ errors });
-    } else {
-        res.location(`/courses/${newCourse.id}`);
-        res.status(201).json(newCourse);   
+        //check validation
+        if (!newCourse.title) {
+            errors.push('Please provide a value for the "title"');
+        }
+        if (!newCourse.description) {
+            errors.push('Please provide a value for the "description"'); 
+        }
+        if (errors.length > 0) {
+            res.status(400).json({ errors });
+        } else {
+            res.location(`/courses/${newCourse.id}`);
+            res.status(201).end();  
+        }
+    } catch(error) {
+        //this is a code snippet from chat.openai.com
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map((err) => err.message);
+            res.status(400).json({ errors: validationErrors });
+        } else {
+            console.error(error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
     }
 }));
 
@@ -112,13 +125,6 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
     try {
         const authenticatedUser = await req.currentUser;
         const findCourseToUpdate = await Course.findByPk(req.params.id);
-         
-        // The following two conditionals are a code snippet from chat.openai.com question 
-        // Check if the course exists
-        if (!findCourseToUpdate) {
-            res.status(404).json({ error: 'Sorry, this course does not exist' });
-            return;
-        }
     
         // Check if the authenticated user is the owner of the course
         if (findCourseToUpdate.userId !== authenticatedUser.id) {
@@ -126,25 +132,33 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
             return;
         }
 
-        const updateCourse = await findCourseToUpdate.update(req.body);
-        const errors = [];
-        
-        //check if a title and description are entered
-        if (!updateCourse.title) {
-            errors.push('Please provide a value for the "title"');
-        }
-        if (!updateCourse.description) {
-            errors.push('Please provide a value for the "description"'); 
-        }
-        if (errors.length > 0) {
+        // Create a new instance of the Course model with the updated data
+        const updatedCourse = Course.build(req.body);
+        updatedCourse.id = req.params.id; // Set the ID to match the requested course ID
+
+        // Perform validation on the updated course instance
+        const validationResult = await updatedCourse.validate();
+
+        if (validationResult) {
+            // If validation fails, extract the error messages
+            const errors = validationResult.errors.map(err => err.message);
             res.status(400).json({ errors });
         } else {
-            res.status(204).json(updateCourse);
-        } 
+            // If validation passes, perform the actual update
+            await findCourseToUpdate.update(req.body);
+            res.status(204).end();  
+        }
     } catch (error) {
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.log('ERROR: ', error.name)
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            const errors = error.errors.map(err => err.message);
+            res.status(400).json({ errors });
+        } else {
+            throw error;
+        }
     }  
 }));
+
 
 //delete course route
 router.delete('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
