@@ -136,25 +136,22 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
         return;
       }
   
-      // Create a new instance of the Course model with the updated data
-      const updatedCourse = Course.build(req.body);
-      updatedCourse.id = req.params.id; // Set the ID to match the requested course ID
+      // Update the course properties
+      findCourseToUpdate.set(req.body);
   
-      // Perform validation on the updated course instance
-      await updatedCourse.validate();
+      // Validate the updated course
+      const validationResult = await findCourseToUpdate.validate();
   
-      // Access the validation errors from the errors property
-      const validationErrors = updatedCourse.errors;
-  
-      if (validationErrors) {
-        // If validation fails, extract the error messages
-        const errors = validationErrors.map((err) => err.message);
-        res.status(400).json({ errors });
-      } else {
-        // If validation passes, perform the actual update
-        await findCourseToUpdate.update(req.body);
-        res.status(204).end();
+      // If there are validation errors, return the error messages
+      if (validationResult && validationResult.errors && validationResult.errors.length > 0) {
+        const errorMessages = validationResult.errors.map((error) => error.message);
+        res.status(400).json({ errors: errorMessages });
+        return;
       }
+  
+      // If validation passes, save the changes
+      await findCourseToUpdate.save();
+      res.status(204).end();
     } catch (error) {
       console.log('ERROR: ', error.name);
       if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
@@ -164,7 +161,7 @@ router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
         throw error;
       }
     }
-}));
+  }));
 
 
 //delete course route
