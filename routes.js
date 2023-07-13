@@ -81,10 +81,14 @@ router.get('/courses', asyncHandler(async (req, res) => {
 
 //show a specific course based on its ID
 router.get('/courses/:id', asyncHandler(async (req, res) => {
-    const userCourse = await Course.findByPk(req.params.id);
+    const userCourse = await Course.findByPk(req.params.id, {
+        include: {
+            model: User, 
+            attributes: ['id', 'firstName', 'lastName', 'emailAddress']         
+   }});
     //filter the following properties
-    const { id, title, description, estimatedTime, materialsNeeded, userId } = userCourse;
-    const filteredProperties = { id, title, description, estimatedTime, materialsNeeded, userId };
+    const { id, title, description, estimatedTime, materialsNeeded, User: { id: userId, firstName, lastName, emailAddress }  } = userCourse;
+    const filteredProperties = { id, title, description, estimatedTime, materialsNeeded, User: { id: userId, firstName, lastName, emailAddress }  };
     res.json(filteredProperties);
 }));
 
@@ -123,40 +127,43 @@ router.post('/courses', authenticateUser, asyncHandler(async (req, res) => {
 //update course route
 router.put('/courses/:id', authenticateUser, asyncHandler(async (req, res) => {
     try {
-        const authenticatedUser = await req.currentUser;
-        const findCourseToUpdate = await Course.findByPk(req.params.id);
-    
-        // Check if the authenticated user is the owner of the course
-        if (findCourseToUpdate.userId !== authenticatedUser.id) {
-            res.status(403).json({ error: 'Sorry, but you are not the owner of this course.' });
-            return;
-        }
-
-        // Create a new instance of the Course model with the updated data
-        const updatedCourse = Course.build(req.body);
-        updatedCourse.id = req.params.id; // Set the ID to match the requested course ID
-
-        // Perform validation on the updated course instance
-        const validationResult = await updatedCourse.validate();
-
-        if (validationResult) {
-            // If validation fails, extract the error messages
-            const errors = validationResult.errors.map(err => err.message);
-            res.status(400).json({ errors });
-        } else {
-            // If validation passes, perform the actual update
-            await findCourseToUpdate.update(req.body);
-            res.status(204).end();  
-        }
+      const authenticatedUser = await req.currentUser;
+      const findCourseToUpdate = await Course.findByPk(req.params.id);
+  
+      // Check if the authenticated user is the owner of the course
+      if (findCourseToUpdate.userId !== authenticatedUser.id) {
+        res.status(403).json({ error: 'Sorry, but you are not the owner of this course.' });
+        return;
+      }
+  
+      // Create a new instance of the Course model with the updated data
+      const updatedCourse = Course.build(req.body);
+      updatedCourse.id = req.params.id; // Set the ID to match the requested course ID
+  
+      // Perform validation on the updated course instance
+      await updatedCourse.validate();
+  
+      // Access the validation errors from the errors property
+      const validationErrors = updatedCourse.errors;
+  
+      if (validationErrors) {
+        // If validation fails, extract the error messages
+        const errors = validationErrors.map((err) => err.message);
+        res.status(400).json({ errors });
+      } else {
+        // If validation passes, perform the actual update
+        await findCourseToUpdate.update(req.body);
+        res.status(204).end();
+      }
     } catch (error) {
-        console.log('ERROR: ', error.name)
-        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
-            const errors = error.errors.map(err => err.message);
-            res.status(400).json({ errors });
-        } else {
-            throw error;
-        }
-    }  
+      console.log('ERROR: ', error.name);
+      if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+        const errors = error.errors.map((err) => err.message);
+        res.status(400).json({ errors });
+      } else {
+        throw error;
+      }
+    }
 }));
 
 
